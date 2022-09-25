@@ -49,8 +49,8 @@ from skimage.transform import rescale, resize, downscale_local_mean
 #6. Report the test set accuracyu with that best model
 
 
-gamma_list = [0.01, 0.003, 0.001, 0.0003, 0.0001]
-c_list = [0.1, 0.2, 0.7, 1, 2, 7, 10] 
+gamma_list = [0.01, 0.02,  0.003, 0.005, 0.001, 0.003,  0.0003, 0.0005,  0.0001, 0.0002]
+c_list = [0.1, 0.2, 0.3, 0.5, 0.7, 0.8,  2, 3, 9, 10] 
 
 h_param_list = [{'gamma':g, 'C':c} for g in gamma_list for c in c_list]
 
@@ -63,9 +63,24 @@ dev_frac=0.1
 digits = datasets.load_digits()
 n_samples = len(digits.images)
 # Classification
+# flatten the images
+n_samples = len(digits.images)
+print("Input Image size is : " , (digits.images[0].shape))
+
+SCALE_FAC=4
+img_res=len(rescale(digits.images[0],SCALE_FAC,anti_aliasing=True))
+print("New Image Size is: ", img_res,'x ', img_res)
+data1=np.empty([ len(digits.images[:,1,1]), img_res, img_res])
 
 
-data = digits.images.reshape((n_samples, -1))
+for i in range(len(digits.images[:,1,1])):
+    data1[i,:]=rescale(digits.images[i],SCALE_FAC,anti_aliasing=True)
+    #pass
+
+
+print("New Image dataset shape is : " , data1.shape)
+
+data = data1.reshape((n_samples, -1))
 
 #image_rescaled = rescale(image, 0.25, anti_aliasing=False)
 
@@ -129,10 +144,10 @@ for hyper_params in h_param_list:
     table1.append([hyper_params, round(100*train_acc,2),round(100*dev_acc,2), round(100*test_acc,2)])
 
 
-#print (table1)    
+    
 for i in table1:
 	print(i)
-#print(best_acc)
+print(best_acc)
 print("best_hyperparams are: ", best_hyperparams)
 
 
