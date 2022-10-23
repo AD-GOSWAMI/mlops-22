@@ -2,165 +2,78 @@
 ================================
 Recognizing hand-written digits
 ================================
+
 This example shows how scikit-learn can be used to recognize images of
 hand-written digits, from 0-9.
+
 """
 
 # Author: Gael Varoquaux <gael dot varoquaux at normalesup dot org>
 # License: BSD 3 clause
-
-# Standard scientific Python imports
-import matplotlib.pyplot as plt
-import numpy as np
-# Import datasets, classifiers and performance metrics
 from sklearn import datasets, svm, metrics
-from sklearn.model_selection import train_test_split
+from sklearn import tree 
+import pdb
 
-from skimage import data, color
-from skimage.transform import rescale, resize, downscale_local_mean
-
-###############################################################################
-# Digits dataset
-# --------------
-#
-# The digits dataset consists of 8x8
-# pixel images of digits. The ``images`` attribute of the dataset stores
-# 8x8 arrays of grayscale values for each image. We will use these arrays to
-# visualize the first 4 images. The ``target`` attribute of the dataset stores
-# the digit each image represents and this is included in the title of the 4
-# plots below.
-#
-# Note: if we were working from image files (e.g., 'png' files), we would load
-# them using :func:`matplotlib.pyplot.imread`.
-
-
-# model hyperparams
+from utils import (
+    preprocess_digits,
+    train_dev_test_split,
+    h_param_tuning,
+    data_viz,
+    pred_image_viz,
+    get_all_h_param_comb,
+    tune_and_save,
+    test_bias,
+    test_class,
+)
 
 
 
-#1. settin the ranges of hyperparameters
+from joblib import dump, load
+
+train_frac, dev_frac, test_frac = 0.8, 0.1, 0.1
+assert train_frac + dev_frac + test_frac == 1.0
+
+# 1. set the ranges of hyper parameters
+gamma_list = [0.01, 0.005, 0.001, 0.0005, 0.0001]
+c_list = [0.1, 0.2, 0.5, 0.7, 1, 2, 5, 7, 10]
+
+params = {}
+params["gamma"] = gamma_list
+params["C"] = c_list
+
+h_param_comb = get_all_h_param_comb(params)
 
 
-#2. train for every combination of hyper parameter values
-
-#3. train the mode1
-#4. compute the accuracy on validations set
-#5. Identify the best combination of hyper parameters for which validation set acuracy is the highest
-#6. Report the test set accuracyu with that best model
-
-
-gamma_list = [0.01, 0.02,  0.003, 0.005, 0.001, 0.003,  0.0003, 0.0005,  0.0001, 0.0002]
-c_list = [0.1, 0.2, 0.3, 0.5, 0.7, 0.8,  2, 3, 9, 10] 
-
-h_param_list = [{'gamma':g, 'C':c} for g in gamma_list for c in c_list]
-
-train_frac=0.8
-test_frac=0.1
-dev_frac=0.1
-
-
-
+# PART: load dataset -- data from csv, tsv, jsonl, pickle
 digits = datasets.load_digits()
-n_samples = len(digits.images)
-# Classification
-# flatten the images
-n_samples = len(digits.images)
-print("Input Image size is : " , (digits.images[0].shape))
-
-SCALE_FAC=4
-img_res=len(rescale(digits.images[0],SCALE_FAC,anti_aliasing=True))
-print("New Image Size is: ", img_res,'x ', img_res)
-data1=np.empty([ len(digits.images[:,1,1]), img_res, img_res])
+data_viz(digits)
+data, label = preprocess_digits(digits)
+# housekeeping
+del digits
 
 
-for i in range(len(digits.images[:,1,1])):
-    data1[i,:]=rescale(digits.images[i],SCALE_FAC,anti_aliasing=True)
-    #pass
 
 
-print("New Image dataset shape is : " , data1.shape)
 
-data = data1.reshape((n_samples, -1))
-
-#image_rescaled = rescale(image, 0.25, anti_aliasing=False)
+svm_model_metric=[]
+DT_model_metric=[]
 
 
-#PART: define train/dev/test splits of experiment protocol
-# train to train model
-# dev to set hyperparameters of the model
-# test to evaluate the performance of the model
-dev_test_frac = 1-train_frac
-X_train, X_dev_test, y_train, y_dev_test = train_test_split(
-    data, digits.target, test_size=dev_test_frac, shuffle=True
+x_train, y_train, x_dev, y_dev, x_test, y_test = train_dev_test_split(
+data, label, train_frac, dev_frac)   
+
+# PART: Define the model
+# Create a classifier: a support vector classifier
+clf = svm.SVC()
+# define the evaluation metric
+metric = metrics.accuracy_score
+SVM_best_model, SVM_best_metric, SVM_best_h_params = h_param_tuning(
+    h_param_comb, clf, x_train, y_train, x_dev, y_dev, metric
 )
-X_test, X_dev, y_test, y_dev = train_test_split(
-    X_dev_test, y_dev_test, test_size=(dev_frac)/dev_test_frac, shuffle=True
-)
+predicted = SVM_best_model.predict(x_test)
+SVM_test_metric = metric(y_pred=predicted, y_true=y_test)
 
+test_bias(SVM_best_model,x_test, y_test)
 
-
-
-#PART: setting up hyperparameter
-#hyper_params = {'gamma':GAMMA, 'c':C}
-best_acc=-1
-best_model=None
-best_hyperparams=None
-table1=[['Hyper_params', "Train Accuracy %",'Dev Accuracy %', 'Test Accuracy %']]
-#table1=[]
-for hyper_params in h_param_list:
-    #print(hyper_params)   
-
-    #PART: Define the model
-    # Create a classifier: a support vector classifier
-    clf = svm.SVC()
-
-    clf.set_params(**hyper_params)
-
-    # Learn the digits on the train subset
-    clf.fit(X_train, y_train)
-
-    # Predict the value of the digit on the test subset
-    predicted_dev = clf.predict(X_dev)
-
-    current_acc = metrics.accuracy_score(y_pred=predicted_dev, y_true=y_dev)
-
-    if current_acc> best_acc:
-        best_acc=current_acc
-        best_model=clf
-        best_hyperparams=hyper_params            
-        #print("Found new best acc :"+str(hyper_params))
-        #print("New best val accuracy is:" + str(current_acc))
-
-
-    predicted_test = clf.predict(X_test)
-    test_acc = metrics.accuracy_score(y_pred=predicted_test, y_true=y_test)
-
-    predicted_train = clf.predict(X_train)
-    train_acc = metrics.accuracy_score(y_pred=predicted_train, y_true=y_train)
-
-    predicted_dev = clf.predict(X_dev)
-    dev_acc = metrics.accuracy_score(y_pred=predicted_dev, y_true=y_dev)
-
-    table1.append([hyper_params, round(100*train_acc,2),round(100*dev_acc,2), round(100*test_acc,2)])
-
-
-    
-for i in table1:
-	print(i)
-print(best_acc)
-print("best_hyperparams are: ", best_hyperparams)
-
-
-predicted_test = best_model.predict(X_test)
-test_acc = metrics.accuracy_score(y_pred=predicted_test, y_true=y_test)
-
-predicted_train = best_model.predict(X_train)
-train_acc = metrics.accuracy_score(y_pred=predicted_train, y_true=y_train)
-
-predicted_dev = best_model.predict(X_dev)
-dev_acc = metrics.accuracy_score(y_pred=predicted_dev, y_true=y_dev)
-
-print("train acc: " + str(round(100*train_acc,2))+" %")
-print("dev acc: " + str(round(100*dev_acc,2))+" %")
-print("test acc: " + str(round(100*test_acc,2))+" %")
+test_class(SVM_best_model,x_test, y_test)
 
